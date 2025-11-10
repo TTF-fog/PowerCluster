@@ -1,5 +1,6 @@
 #made for Arch Linux
 # I AHTE BASH  I HATE BASH I HATE BASH
+#unlocks bootloader of phone
 sudo pacman -S --needed android-tools #adb
 sudo pacman -S --needed usbutils      #lsusb
 devices=(
