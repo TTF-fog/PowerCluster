@@ -5,22 +5,26 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"math/rand"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
-	"time"
 )
 
 type listKeyMap struct {
-	previewItem key.Binding
-	reloadData  key.Binding
-	goBack      key.Binding
-	newTask     key.Binding
-	editItem    key.Binding
-	deleteItem  key.Binding
-	showHelp    key.Binding
-	quit        key.Binding
-	enterFolder key.Binding
+	previewItem  key.Binding
+	reloadData   key.Binding
+	goBack       key.Binding
+	newPhone     key.Binding
+	editItem     key.Binding
+	deleteItem   key.Binding
+	showHelp     key.Binding
+	quit         key.Binding
+	enterCluster key.Binding
+	startJob     key.Binding
+	stopJob      key.Binding
+	restartJob   key.Binding
 }
 type itemKeyMap struct {
 	goUp   key.Binding
@@ -31,51 +35,56 @@ type itemKeyMap struct {
 
 func newListKeyMap() *listKeyMap {
 	return &listKeyMap{
-		previewItem: key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "preview task folder structure")),
-		goBack:      key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "go to previous folder")),
-		reloadData:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload data")),
-		newTask:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new task")),
-		editItem:    key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit item")),
-		deleteItem:  key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete item")),
-		showHelp:    key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "toggle help")),
-		quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
-		enterFolder: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "enter folder/toggle task")),
+		previewItem:  key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "preview cluster structure")),
+		goBack:       key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "go to previous cluster")),
+		reloadData:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload data")),
+		newPhone:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new phone")),
+		editItem:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit item")),
+		deleteItem:   key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete item")),
+		showHelp:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "toggle help")),
+		quit:         key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		enterCluster: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "enter cluster/toggle phone")),
+		startJob:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "start job")),
+		stopJob:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "stop job")),
+		restartJob:   key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart job")),
 	}
 }
 
-type TaskFolder struct {
-	Name                string `json:"Name,omitempty"`
-	Desc                string `json:"Desc,omitempty"`
-	Progress            progress.Model
-	Parent              *TaskFolder   `json:"Parent,omitempty"`
-	ChildrenTasks       []*Task       `json:"children_tasks,omitempty"`
-	ChildrenTaskFolders []*TaskFolder `json:"children_task_folders,omitempty"`
-	Status              Status        `json:"Status"`
+type Cluster struct {
+	Name             string `json:"Name,omitempty"`
+	Desc             string `json:"Desc,omitempty"`
+	Progress         progress.Model
+	Parent           *Cluster   `json:"Parent,omitempty"`
+	ChildrenPhones   []*Phone   `json:"children_phones,omitempty"`
+	ChildrenClusters []*Cluster `json:"children_clusters,omitempty"`
+	Stats            Stats      `json:"Stats"`
+	JobPercentage    float64    `json:"-"`
+	JobState         string     `json:"-"` // "stopped", "running"
 }
 
-func (i *TaskFolder) Title() string       { return "📁" + i.Name }
-func (i *TaskFolder) Description() string { return i.Desc }
-func (i *TaskFolder) FilterValue() string {
+func (i *Cluster) Title() string       { return "🌐" + i.Name }
+func (i *Cluster) Description() string { return i.Desc }
+func (i *Cluster) FilterValue() string {
 	return i.Name
 }
-func (i *TaskFolder) returnTree() string {
-	s := "Task View \n"
+func (i *Cluster) returnTree() string {
+	s := "Cluster View \n"
 	//TODO make this recursive?
 	s += i.Desc + "\n"
-	for _, item := range i.ChildrenTaskFolders {
+	for _, item := range i.ChildrenClusters {
 		s += item.Title() + "\n"
-		for _, i := range item.ChildrenTasks {
+		for _, i := range item.ChildrenPhones {
 			s += " - " + i.returnStatusString()
 
 		}
 
 	}
-	for _, i := range i.ChildrenTasks {
+	for _, i := range i.ChildrenPhones {
 		s += " -" + i.returnStatusString()
 	}
 	return s
 }
-func (i *TaskFolder) returnPath() string {
+func (i *Cluster) returnPath() string {
 	var pathParts []string
 	current := i
 	pathParts = append(pathParts, "Root")
@@ -87,31 +96,17 @@ func (i *TaskFolder) returnPath() string {
 	slices.Reverse(pathParts)
 	return strings.Join(pathParts, " > ")
 }
-func (t *Task) returnStatusString() string {
+func (t *Phone) returnStatusString() string {
 	var s string
-	render_warning := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF593B")).Render
-	if t.Completed {
-		s += "📝 (✓Completed!) " + t.Title() + "\n"
-		s += ""
+	s += "📱 " + t.Title() + "\n"
+	if t.Description() != "" {
 		s += "\t" + t.Description() + "\n"
-	} else {
-		s += "📝 " + t.Title() + "\n"
-		if !t.DueDate.IsZero() {
-			if t.Overdue {
-				s += render_warning("📅 Overdue! %s\n", t.DueDate.Format("02/01/06 15:04"))
-			} else {
-				s += "📅" + t.DueDate.Format("02/01/06 15:04") + "\n"
-			}
-		}
-		if t.Description() != "" {
-			s += "\t" + t.Description() + "\n"
-		}
-
 	}
+	s += fmt.Sprintf("\tRAM: %s, CPU: %s, CPU Speed: %s", t.RAM, t.CPU, t.CPUSpeed)
 	return s
 }
 
-func (i *TaskFolder) update(msg tea.Msg) tea.Cmd {
+func (i *Cluster) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		i.Progress.Width = msg.Width - padding*2 - 4
@@ -124,20 +119,19 @@ func (i *TaskFolder) update(msg tea.Msg) tea.Cmd {
 	}
 }
 
-func (i *TaskFolder) View() string {
+func (i *Cluster) View() string {
 
 	pad := strings.Repeat(" ", padding)
 	return "" + pad + i.Name + "" + pad + i.Progress.ViewAs(0.12) + "\n"
 }
 
-type Task struct {
-	ParentFolder *TaskFolder
-	Name         string
-	Desc         string
-	Completed    bool
-	DueDate      time.Time
-	Priority     int
-	Overdue      bool
+type Phone struct {
+	ParentCluster *Cluster
+	Name          string
+	Desc          string
+	RAM           string
+	CPU           string
+	CPUSpeed      string
 }
 
 func (k listKeyMap) ShortHelp() []key.Binding {
@@ -145,8 +139,9 @@ func (k listKeyMap) ShortHelp() []key.Binding {
 }
 func (k listKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.enterFolder, k.goBack, k.newTask, k.editItem},                // first column
+		{k.enterCluster, k.goBack, k.newPhone, k.editItem},              // first column
 		{k.deleteItem, k.previewItem, k.reloadData, k.showHelp, k.quit}, // second column
+		{k.startJob, k.stopJob, k.restartJob},                           // third column
 	}
 }
 
@@ -162,7 +157,7 @@ func newCreateNewKeyMap() createNewKeyMap {
 	return createNewKeyMap{
 		save:       key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
 		cancel:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
-		toggleType: key.NewBinding(key.WithKeys("alt+t"), key.WithHelp("alt+t", "toggle task/folder")),
+		toggleType: key.NewBinding(key.WithKeys("alt+t"), key.WithHelp("alt+t", "toggle phone/cluster")),
 		nextField:  key.NewBinding(key.WithKeys("down"), key.WithHelp("down", "next field")),
 		prevField:  key.NewBinding(key.WithKeys("up"), key.WithHelp("up", "previous field")),
 	}
@@ -205,42 +200,72 @@ var keys = newListKeyMap()
 var createKeys = newCreateNewKeyMap()
 var deleteKeys = newDeletionKeyMap()
 
-func (t *Task) FilterValue() string { return t.Name }
-func (t *Task) Title() string       { return t.Name }
-func (t *Task) Description() string { return t.Desc }
-func (t *Task) setTimeStatus() {
-	if time.Now().After(t.DueDate) {
-		t.Overdue = true
-		t.ParentFolder.Status.Overdue += 1
-	} else {
-		t.Overdue = false
-	}
-}
-func (t *Task) setCompletionStatus(status bool) {
-	if status {
-		t.Completed = true
-		t.ParentFolder.Status.Completed += 1
-	} else {
-		t.Completed = false
-		t.ParentFolder.Status.Completed -= 1
-	}
+func (t *Phone) FilterValue() string { return t.Name }
+func (t *Phone) Title() string       { return t.Name }
+func (t *Phone) Description() string { return t.Desc }
+
+type Stats struct {
+	AvgRAM float64 `json:"AvgRAM,omitempty"`
+	AvgCPU float64 `json:"AvgCPU,omitempty"`
 }
 
-type Status struct {
-	Completed int `json:"Completed,omitempty"`
-	Total     int `json:"Total,omitempty"`
-	Overdue   int `json:"Overdue,omitempty"`
-}
-
-func (s *Status) print() string {
-
-	//render_info := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFED33")).Render
+func (s *Stats) print() string {
 	var pp_string string
-	if s.Overdue > 0 {
-		pp_string += renderWarning(fmt.Sprintf("%d overdue, ", s.Overdue))
-	} else {
-		pp_string += fmt.Sprintf("%d overdue, ", s.Overdue)
-	}
-	pp_string += fmt.Sprintf("%d/%d completed \n", s.Completed, s.Total)
+	pp_string += fmt.Sprintf("Average RAM: %.2f GB, ", s.AvgRAM)
+	pp_string += fmt.Sprintf("Average CPU: %.2f Cores \n", s.AvgCPU)
 	return pp_string
+}
+
+func (c *Cluster) calculateStats() (totalRAM float64, totalCPU float64, totalPhones int) {
+	var currentRAM, currentCPU float64
+	var currentPhones int
+	re := regexp.MustCompile(`[0-9\.]+`)
+
+	for _, phone := range c.ChildrenPhones {
+		ramStr := phone.RAM
+		ramNumStr := re.FindString(ramStr)
+		ram, err := strconv.ParseFloat(ramNumStr, 64)
+		if err == nil {
+			currentRAM += ram
+		}
+
+		cpuStr := phone.CPU
+		cpuNumStr := re.FindString(cpuStr)
+		cpu, err := strconv.ParseFloat(cpuNumStr, 64)
+		if err == nil {
+			currentCPU += cpu
+		}
+		currentPhones++
+	}
+
+	for _, child := range c.ChildrenClusters {
+		childRAM, childCPU, childPhones := child.calculateStats()
+		currentRAM += childRAM
+		currentCPU += childCPU
+		currentPhones += childPhones
+	}
+
+	if currentPhones > 0 {
+		c.Stats.AvgRAM = currentRAM / float64(currentPhones)
+		c.Stats.AvgCPU = currentCPU / float64(currentPhones)
+	} else {
+		c.Stats.AvgRAM = 0
+		c.Stats.AvgCPU = 0
+	}
+
+	return currentRAM, currentCPU, currentPhones
+}
+
+func (c *Cluster) updateJobPercentages() {
+	if c.JobState == "running" {
+		if c.JobPercentage < 1.0 {
+			c.JobPercentage += rand.Float64() / 20.0 // Slower increment
+		}
+		if c.JobPercentage > 1.0 {
+			c.JobPercentage = 1.0
+		}
+	}
+	for _, child := range c.ChildrenClusters {
+		child.updateJobPercentages()
+	}
 }

@@ -13,9 +13,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"go.dalton.dog/bubbleup"
 	"io"
+	"math/rand"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -28,7 +27,7 @@ const (
 	minFrameWidth  = 200
 	minFrameHeight = 200
 	padding        = 1
-	TASK_MESSAGE   = "Alt+T to switch modes, Enter to Save, Esc to leave"
+	PHONE_MESSAGE  = "Alt+T to switch modes, Enter to Save, Esc to leave"
 )
 
 var config_path = "config.json"
@@ -44,15 +43,12 @@ func (d itemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
 
 func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
 	switch item := listItem.(type) {
-	case *TaskFolder:
+	case *Cluster:
 		s := item
 
-		var p float64
-		if s.Status.Total > 0 {
-			p = float64(s.Status.Completed) / float64(s.Status.Total)
-		}
-
-		str := fmt.Sprintf("%s \n %s \n %s", s.Title(), s.Status.print(), s.Progress.ViewAs(p))
+		p := s.JobPercentage
+		progressStr := fmt.Sprintf("%s of job", s.Progress.ViewAs(p))
+		str := fmt.Sprintf("%s \n %s \n %s \n %s", s.Title(), s.Description(), s.Stats.print(), progressStr)
 		fn := lipgloss.NewStyle().PaddingLeft(4).Render
 		if index == m.Index() {
 			fn = func(s ...string) string {
@@ -65,18 +61,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		}
 		fmt.Fprint(w, fn(str))
 		return
-	case *Task:
+	case *Phone:
 		s := item
-		priorityStr := ""
-		switch s.Priority {
-		case 1:
-			priorityStr = fmt.Sprintf("Priority: %s", lipgloss.NewStyle().Foreground(lipgloss.Color("70")).Render("LOW"))
-		case 2:
-			priorityStr = fmt.Sprintf("Priority: %s", lipgloss.NewStyle().Foreground(lipgloss.Color("202")).Render("MED"))
-		case 3:
-			priorityStr = fmt.Sprintf("Priority: %s", lipgloss.NewStyle().Foreground(lipgloss.Color("124")).Render("HIGH"))
-		}
-		str := fmt.Sprintf("%s%s", s.returnStatusString(), priorityStr)
+		str := s.returnStatusString()
 		fn := lipgloss.NewStyle().PaddingLeft(4).Render
 		if index == m.Index() {
 			fn = func(s ...string) string {
@@ -92,75 +79,89 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 }
 
 type CreateNewUI struct {
-	taskNameInput          textinput.Model
-	status                 string
-	taskDescInput          textarea.Model
-	taskDueDateInput       textinput.Model
-	shouldCreateTaskFolder bool
-	creatingTask           bool
-	taskPriorityInput      textinput.Model
-	edit                   bool
+	nameInput           textinput.Model
+	status              string
+	descInput           textarea.Model
+	ramInput            textinput.Model
+	cpuInput            textinput.Model
+	cpuSpeedInput       textinput.Model
+	shouldCreateCluster bool
+	creatingItem        bool
+	edit                bool
 }
 type model struct {
-	list          list.Model
-	statusString  string
-	currentFolder *TaskFolder
-	alert         bubbleup.AlertModel
-	rootFolder    *TaskFolder
-	createNewUI   *CreateNewUI
-	itemsToDelete []list.Item
-	deletionMode  bool
-	sortMode      bool
-	help          help.Model
-	showHelp      bool
+	list           list.Model
+	statusString   string
+	currentCluster *Cluster
+	alert          bubbleup.AlertModel
+	rootCluster    *Cluster
+	createNewUI    *CreateNewUI
+	itemsToDelete  []list.Item
+	deletionMode   bool
+	sortMode       bool
+	help           help.Model
+	showHelp       bool
+}
+
+type tickMsg time.Time
+
+func periodicTicker() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (m *model) Init() tea.Cmd {
-	return m.alert.Init()
+	return tea.Batch(m.alert.Init(), periodicTicker())
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var alertCmd tea.Cmd
 	switch msg := msg.(type) {
+	case tickMsg:
+		if m.rootCluster != nil {
+			m.rootCluster.updateJobPercentages()
+		}
+		return m, periodicTicker()
 	case tea.KeyMsg:
 		if m.deletionMode {
 			switch msg.String() {
 			case "c":
-				var newTasks []*Task
-				for _, task := range m.currentFolder.ChildrenTasks {
+				var newPhones []*Phone
+				for _, phone := range m.currentCluster.ChildrenPhones {
 					isDeleting := false
 					for _, toDelete := range m.itemsToDelete {
-						if t, ok := toDelete.(*Task); ok && t == task {
+						if p, ok := toDelete.(*Phone); ok && p == phone {
 							isDeleting = true
 							break
 						}
 					}
 					if !isDeleting {
-						newTasks = append(newTasks, task)
+						newPhones = append(newPhones, phone)
 					}
 				}
-				m.currentFolder.ChildrenTasks = newTasks
+				m.currentCluster.ChildrenPhones = newPhones
 
-				var newFolders []*TaskFolder
-				for _, folder := range m.currentFolder.ChildrenTaskFolders {
+				var newClusters []*Cluster
+				for _, cluster := range m.currentCluster.ChildrenClusters {
 					isDeleting := false
 					for _, toDelete := range m.itemsToDelete {
-						if f, ok := toDelete.(*TaskFolder); ok && f == folder {
+						if f, ok := toDelete.(*Cluster); ok && f == cluster {
 							isDeleting = true
 							break
 						}
 					}
 					if !isDeleting {
-						newFolders = append(newFolders, folder)
+						newClusters = append(newClusters, cluster)
 					}
 				}
-				m.currentFolder.ChildrenTaskFolders = newFolders
+				m.currentCluster.ChildrenClusters = newClusters
 
 				m.deletionMode = false
 				m.itemsToDelete = nil
 				m.statusString = "Deleted items."
-				m.recreateList(m.currentFolder, 0)
-				if err := m.rootFolder.DeepCopy(); err != nil {
+				m.recreateList(m.currentCluster, 0)
+				if err := m.rootCluster.DeepCopy(); err != nil {
 					MarshalToFile("config_path", err)
 				}
 
@@ -168,172 +169,145 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				for _, item := range m.itemsToDelete {
 					switch v := item.(type) {
-					case *Task:
+					case *Phone:
 						v.Name = strings.TrimSuffix(v.Name, " (queued for deletion)")
-					case *TaskFolder:
+					case *Cluster:
 						v.Name = strings.TrimSuffix(v.Name, " (queued for deletion)")
 					}
 				}
 				m.deletionMode = false
 				m.itemsToDelete = nil
 				m.statusString = "Deletion cancelled."
-				m.recreateList(m.currentFolder, m.list.Index())
+				m.recreateList(m.currentCluster, m.list.Index())
 				return m, nil
 			}
 		}
-		if m.createNewUI.creatingTask {
+		if m.createNewUI.creatingItem {
 			switch msg.String() {
 			case "enter":
 				if m.createNewUI.edit {
 					switch selectedItem := m.list.SelectedItem().(type) {
-					case *TaskFolder:
-						selectedItem.Name, selectedItem.Desc = m.createNewUI.taskNameInput.Value(), m.createNewUI.taskDescInput.Value()
-					case *Task:
-						selectedItem.Name, selectedItem.Desc = m.createNewUI.taskNameInput.Value(), m.createNewUI.taskDescInput.Value()
-						if m.createNewUI.taskDueDateInput.Value() != "" {
-							dueDate, err := time.Parse("02/01/06 15:04", m.createNewUI.taskDueDateInput.Value())
-							if err != nil {
-								alertCmd = m.alert.NewAlertCmd(bubbleup.ErrorKey, "Invalid date format!")
-								return m, alertCmd
-							}
-							selectedItem.DueDate = dueDate
-							selectedItem.setTimeStatus()
-						}
-						if m.createNewUI.taskPriorityInput.Value() != "" {
-							prio := m.createNewUI.taskPriorityInput.Value()
-							if prio == "LOW" {
-								selectedItem.Priority = 1
-							} else if prio == "MED" {
-								selectedItem.Priority = 2
-							} else {
-								selectedItem.Priority = 3
-							}
-						}
+					case *Cluster:
+						selectedItem.Name, selectedItem.Desc = m.createNewUI.nameInput.Value(), m.createNewUI.descInput.Value()
+					case *Phone:
+						selectedItem.Name, selectedItem.Desc = m.createNewUI.nameInput.Value(), m.createNewUI.descInput.Value()
+						selectedItem.RAM = m.createNewUI.ramInput.Value()
+						selectedItem.CPU = m.createNewUI.cpuInput.Value()
+						selectedItem.CPUSpeed = m.createNewUI.cpuSpeedInput.Value()
 					}
 
-					m.recreateList(m.currentFolder, m.list.GlobalIndex())
-					m.createNewUI.creatingTask = false
+					m.recreateList(m.currentCluster, m.list.GlobalIndex())
+					m.createNewUI.creatingItem = false
 					m.createNewUI.edit = false
-					m.createNewUI.taskNameInput.Reset()
-					m.createNewUI.taskDescInput.Reset()
-					m.createNewUI.taskPriorityInput.Reset()
-					if err := m.rootFolder.DeepCopy(); err != nil {
+					m.createNewUI.nameInput.Reset()
+					m.createNewUI.descInput.Reset()
+					m.createNewUI.ramInput.Reset()
+					m.createNewUI.cpuInput.Reset()
+					m.createNewUI.cpuSpeedInput.Reset()
+					if err := m.rootCluster.DeepCopy(); err != nil {
 						MarshalToFile(config_path, err)
 					}
 					break
 				}
-				if m.createNewUI.shouldCreateTaskFolder {
-					m.currentFolder.ChildrenTaskFolders = append(m.currentFolder.ChildrenTaskFolders, &TaskFolder{
-						Name:     m.createNewUI.taskNameInput.Value(),
-						Parent:   m.currentFolder,
-						Desc:     m.createNewUI.taskDescInput.Value(),
+				if m.createNewUI.shouldCreateCluster {
+					m.currentCluster.ChildrenClusters = append(m.currentCluster.ChildrenClusters, &Cluster{
+						Name:     m.createNewUI.nameInput.Value(),
+						Parent:   m.currentCluster,
+						Desc:     m.createNewUI.descInput.Value(),
 						Progress: progress.New(),
+						JobState: "stopped",
 					})
 				} else {
-					task := &Task{
-						Name:         m.createNewUI.taskNameInput.Value(),
-						ParentFolder: m.currentFolder,
-						Desc:         m.createNewUI.taskDescInput.Value(),
+					phone := &Phone{
+						Name:          m.createNewUI.nameInput.Value(),
+						ParentCluster: m.currentCluster,
+						Desc:          m.createNewUI.descInput.Value(),
+						RAM:           m.createNewUI.ramInput.Value(),
+						CPU:           m.createNewUI.cpuInput.Value(),
+						CPUSpeed:      m.createNewUI.cpuSpeedInput.Value(),
 					}
-					if m.createNewUI.taskDueDateInput.Value() != "" {
-						dueDate, err := time.Parse("02/01/06 15:04", m.createNewUI.taskDueDateInput.Value())
-						if err != nil {
-							alertCmd = m.alert.NewAlertCmd(bubbleup.ErrorKey, "Invalid date format!"+err.Error())
-							return m, alertCmd
-						}
-						task.DueDate = dueDate
-						task.setTimeStatus()
-					}
-					if m.createNewUI.taskPriorityInput.Value() != "" {
-						if m.createNewUI.taskPriorityInput.Value() != "" {
-							prio := m.createNewUI.taskPriorityInput.Value()
-							if prio == "LOW" {
-								task.Priority = 1
-							} else if prio == "MED" {
-								task.Priority = 2
-							} else if prio == "HIGH" {
-								task.Priority = 3
-							} else {
-								alertCmd = m.alert.NewAlertCmd(bubbleup.ErrorKey, "Invalid priority format!")
-								return m, alertCmd
-							}
-						}
-					}
-
-					m.currentFolder.ChildrenTasks = append(m.currentFolder.ChildrenTasks, task)
-					m.currentFolder.Status.Total++
+					m.currentCluster.ChildrenPhones = append(m.currentCluster.ChildrenPhones, phone)
 				}
-				m.recreateList(m.currentFolder, 0)
-				if err := m.rootFolder.DeepCopy(); err != nil {
+				m.recreateList(m.currentCluster, 0)
+				if err := m.rootCluster.DeepCopy(); err != nil {
 					MarshalToFile(config_path, err)
 				}
-				m.createNewUI.creatingTask = false
-				m.createNewUI.taskNameInput.Reset()
-				m.createNewUI.taskDescInput.Reset()
-				m.createNewUI.taskDueDateInput.Reset()
-				m.createNewUI.taskPriorityInput.Reset()
+				m.createNewUI.creatingItem = false
+				m.createNewUI.nameInput.Reset()
+				m.createNewUI.descInput.Reset()
+				m.createNewUI.ramInput.Reset()
+				m.createNewUI.cpuInput.Reset()
+				m.createNewUI.cpuSpeedInput.Reset()
 			case "esc":
-				m.createNewUI.creatingTask = false
+				m.createNewUI.creatingItem = false
 				m.createNewUI.status = ""
 				m.createNewUI.edit = false
-				m.createNewUI.shouldCreateTaskFolder = false
-				m.createNewUI.taskNameInput.Reset()
-				m.createNewUI.taskDescInput.Reset()
-				m.createNewUI.taskDueDateInput.Reset()
-				m.createNewUI.taskPriorityInput.Reset()
+				m.createNewUI.shouldCreateCluster = false
+				m.createNewUI.nameInput.Reset()
+				m.createNewUI.descInput.Reset()
+				m.createNewUI.ramInput.Reset()
+				m.createNewUI.cpuInput.Reset()
+				m.createNewUI.cpuSpeedInput.Reset()
 
 			case "down":
-				if m.createNewUI.taskNameInput.Focused() {
-					m.createNewUI.taskNameInput.Blur()
-					m.createNewUI.taskDescInput.Focus()
-				} else if m.createNewUI.taskDescInput.Focused() {
-					m.createNewUI.taskDescInput.Blur()
-					if !m.createNewUI.shouldCreateTaskFolder {
-						m.createNewUI.taskDueDateInput.Focus()
+				if m.createNewUI.nameInput.Focused() {
+					m.createNewUI.nameInput.Blur()
+					m.createNewUI.descInput.Focus()
+				} else if m.createNewUI.descInput.Focused() {
+					m.createNewUI.descInput.Blur()
+					if !m.createNewUI.shouldCreateCluster {
+						m.createNewUI.ramInput.Focus()
 					} else {
-						m.createNewUI.taskNameInput.Focus()
+						m.createNewUI.nameInput.Focus()
 					}
-				} else if m.createNewUI.taskDueDateInput.Focused() {
-					m.createNewUI.taskDueDateInput.Blur()
-					m.createNewUI.taskPriorityInput.Focus()
-				} else if m.createNewUI.taskPriorityInput.Focused() {
-					m.createNewUI.taskPriorityInput.Blur()
-					m.createNewUI.taskNameInput.Focus()
+				} else if m.createNewUI.ramInput.Focused() {
+					m.createNewUI.ramInput.Blur()
+					m.createNewUI.cpuInput.Focus()
+				} else if m.createNewUI.cpuInput.Focused() {
+					m.createNewUI.cpuInput.Blur()
+					m.createNewUI.cpuSpeedInput.Focus()
+				} else if m.createNewUI.cpuSpeedInput.Focused() {
+					m.createNewUI.cpuSpeedInput.Blur()
+					m.createNewUI.nameInput.Focus()
 				}
 			case "up":
-				if m.createNewUI.taskNameInput.Focused() {
-					m.createNewUI.taskNameInput.Blur()
-					if m.createNewUI.shouldCreateTaskFolder {
-						m.createNewUI.taskDescInput.Focus()
+				if m.createNewUI.nameInput.Focused() {
+					m.createNewUI.nameInput.Blur()
+					if m.createNewUI.shouldCreateCluster {
+						m.createNewUI.descInput.Focus()
 					} else {
-						m.createNewUI.taskPriorityInput.Focus()
+						m.createNewUI.cpuSpeedInput.Focus()
 					}
-				} else if m.createNewUI.taskDescInput.Focused() {
-					m.createNewUI.taskDescInput.Blur()
-					m.createNewUI.taskNameInput.Focus()
-				} else if m.createNewUI.taskDueDateInput.Focused() {
-					m.createNewUI.taskDueDateInput.Blur()
-					m.createNewUI.taskDescInput.Focus()
-				} else if m.createNewUI.taskPriorityInput.Focused() {
-					m.createNewUI.taskPriorityInput.Blur()
-					m.createNewUI.taskDueDateInput.Focus()
+				} else if m.createNewUI.descInput.Focused() {
+					m.createNewUI.descInput.Blur()
+					m.createNewUI.nameInput.Focus()
+				} else if m.createNewUI.ramInput.Focused() {
+					m.createNewUI.ramInput.Blur()
+					m.createNewUI.descInput.Focus()
+				} else if m.createNewUI.cpuInput.Focused() {
+					m.createNewUI.cpuInput.Blur()
+					m.createNewUI.ramInput.Focus()
+				} else if m.createNewUI.cpuSpeedInput.Focused() {
+					m.createNewUI.cpuSpeedInput.Blur()
+					m.createNewUI.cpuInput.Focus()
 				}
 			case "alt+t":
 				if m.createNewUI.edit {
 					break
 				}
-				m.createNewUI.shouldCreateTaskFolder = !m.createNewUI.shouldCreateTaskFolder
-				m.createNewUI.taskNameInput.Focus()
-				m.createNewUI.taskDescInput.Blur()
-				m.createNewUI.taskDueDateInput.Blur()
-				m.createNewUI.taskPriorityInput.Blur()
-				if m.createNewUI.shouldCreateTaskFolder {
-					m.createNewUI.status = "New Folder: " + TASK_MESSAGE
-					alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating TaskFolder")
+				m.createNewUI.shouldCreateCluster = !m.createNewUI.shouldCreateCluster
+				m.createNewUI.nameInput.Focus()
+				m.createNewUI.descInput.Blur()
+				m.createNewUI.ramInput.Blur()
+				m.createNewUI.cpuInput.Blur()
+				m.createNewUI.cpuSpeedInput.Blur()
+				if m.createNewUI.shouldCreateCluster {
+					m.createNewUI.status = "New Cluster: " + PHONE_MESSAGE
+					alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating Cluster")
 					return m, alertCmd
 				} else {
-					m.createNewUI.status = "New Task: " + TASK_MESSAGE
-					alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating Task")
+					m.createNewUI.status = "New Phone: " + PHONE_MESSAGE
+					alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating Phone")
 					return m, alertCmd
 				}
 
@@ -341,16 +315,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmds []tea.Cmd
 			var cmd tea.Cmd
 
-			m.createNewUI.taskNameInput, cmd = m.createNewUI.taskNameInput.Update(msg)
+			m.createNewUI.nameInput, cmd = m.createNewUI.nameInput.Update(msg)
 			cmds = append(cmds, cmd)
 
-			m.createNewUI.taskDescInput, cmd = m.createNewUI.taskDescInput.Update(msg)
+			m.createNewUI.descInput, cmd = m.createNewUI.descInput.Update(msg)
 			cmds = append(cmds, cmd)
 
-			m.createNewUI.taskDueDateInput, cmd = m.createNewUI.taskDueDateInput.Update(msg)
+			m.createNewUI.ramInput, cmd = m.createNewUI.ramInput.Update(msg)
 			cmds = append(cmds, cmd)
 
-			m.createNewUI.taskPriorityInput, cmd = m.createNewUI.taskPriorityInput.Update(msg)
+			m.createNewUI.cpuInput, cmd = m.createNewUI.cpuInput.Update(msg)
+			cmds = append(cmds, cmd)
+
+			m.createNewUI.cpuSpeedInput, cmd = m.createNewUI.cpuSpeedInput.Update(msg)
 			cmds = append(cmds, cmd)
 
 			return m, tea.Batch(cmds...)
@@ -358,36 +335,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.sortMode {
 			switch msg.String() {
-			case "1":
-				vm := make([]*Task, len(m.currentFolder.ChildrenTasks))
-				copy(vm, m.currentFolder.ChildrenTasks)
-				sort.Slice(vm, func(i, j int) bool {
-					return vm[i].Priority > vm[j].Priority
-				})
-				m.currentFolder.ChildrenTasks = vm
-				m.recreateList(m.currentFolder, 0)
+			case "1", "2", "3": // No longer have these sort options
 				m.sortMode = false
-				m.statusString = "Sorted by priority"
-			case "2":
-				vm := make([]*Task, len(m.currentFolder.ChildrenTasks))
-				copy(vm, m.currentFolder.ChildrenTasks)
-				sort.Slice(vm, func(i, j int) bool {
-					return vm[i].Name > vm[j].Name
-				})
-				m.currentFolder.ChildrenTasks = vm
-				m.recreateList(m.currentFolder, 0)
-				m.sortMode = false
-				m.statusString = "Sorted by name"
-			case "3":
-				vm := make([]*Task, len(m.currentFolder.ChildrenTasks))
-				copy(vm, m.currentFolder.ChildrenTasks)
-				sort.SliceStable(vm, func(i, j int) bool {
-					return vm[i].Completed != vm[j].Completed
-				})
-				m.currentFolder.ChildrenTasks = vm
-				m.recreateList(m.currentFolder, 0)
-				m.sortMode = false
-				m.statusString = "Sorted by completion status "
+				m.statusString = "Sorting not applicable for Phones."
+
 			case "esc":
 				m.sortMode = false
 				m.statusString = "Cancelled sort mode"
@@ -402,61 +353,67 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "r":
-			main()
+			if item, ok := m.list.SelectedItem().(*Cluster); ok {
+				item.JobPercentage = 0
+				item.JobState = "running"
+				m.statusString = fmt.Sprintf("Restarted job for cluster %s", item.Name)
+			}
+		case "s": // Start job
+			if item, ok := m.list.SelectedItem().(*Cluster); ok {
+				item.JobState = "running"
+				m.statusString = fmt.Sprintf("Started job for cluster %s", item.Name)
+			}
+		case "x": // Stop job
+			if item, ok := m.list.SelectedItem().(*Cluster); ok {
+				item.JobState = "stopped"
+				m.statusString = fmt.Sprintf("Stopped job for cluster %s", item.Name)
+			}
 		case "f":
-			m.statusString = "In sort mode, sort by (1) Priority / (2) Name / (3) Completion Status"
-			m.sortMode = true
+			m.statusString = "Sort mode not applicable."
+			m.sortMode = false
 			return m, nil
 		case "enter":
 			last_pos = m.list.Index()
 			switch selectedItem := m.list.SelectedItem().(type) {
-			case *TaskFolder:
+			case *Cluster:
 				m.recreateList(selectedItem, 0)
-			case *Task:
-				selectedItem.setCompletionStatus(!selectedItem.Completed)
-				m.recreateList(selectedItem.ParentFolder, m.list.GlobalIndex())
-				if err := m.rootFolder.DeepCopy(); err != nil {
-					MarshalToFile(config_path, err)
-				}
+			case *Phone:
+				// No action on enter for phone
 			}
 		case "e":
-			m.createNewUI.creatingTask = true
+			m.createNewUI.creatingItem = true
 			m.createNewUI.edit = true
-			m.createNewUI.taskNameInput.Focus()
-			m.createNewUI.taskDescInput.Blur()
-			m.createNewUI.taskDueDateInput.Blur()
-			m.createNewUI.taskPriorityInput.Blur()
+			m.createNewUI.nameInput.Focus()
+			m.createNewUI.descInput.Blur()
+			m.createNewUI.ramInput.Blur()
+			m.createNewUI.cpuInput.Blur()
+			m.createNewUI.cpuSpeedInput.Blur()
 			switch selectedItem := m.list.SelectedItem().(type) {
-			case *TaskFolder:
-				m.createNewUI.shouldCreateTaskFolder = true
-				m.createNewUI.status = "Editing Folder: " + TASK_MESSAGE
-				m.createNewUI.taskNameInput.SetValue(selectedItem.Name)
-				m.createNewUI.taskDescInput.SetValue(selectedItem.Desc)
-			case *Task:
-				m.createNewUI.shouldCreateTaskFolder = false
-				m.createNewUI.status = "Editing Task: " + TASK_MESSAGE
-				m.createNewUI.taskNameInput.SetValue(selectedItem.Name)
-				m.createNewUI.taskDescInput.SetValue(selectedItem.Desc)
-				if !selectedItem.DueDate.IsZero() {
-					m.createNewUI.taskDueDateInput.SetValue(selectedItem.DueDate.Format("02/01/06 15:04"))
-				}
-				if selectedItem.Priority != 0 {
-					m.createNewUI.taskPriorityInput.SetValue(strconv.Itoa(selectedItem.Priority))
-				} else {
-					m.createNewUI.taskPriorityInput.SetValue("")
-				}
+			case *Cluster:
+				m.createNewUI.shouldCreateCluster = true
+				m.createNewUI.status = "Editing Cluster: " + PHONE_MESSAGE
+				m.createNewUI.nameInput.SetValue(selectedItem.Name)
+				m.createNewUI.descInput.SetValue(selectedItem.Desc)
+			case *Phone:
+				m.createNewUI.shouldCreateCluster = false
+				m.createNewUI.status = "Editing Phone: " + PHONE_MESSAGE
+				m.createNewUI.nameInput.SetValue(selectedItem.Name)
+				m.createNewUI.descInput.SetValue(selectedItem.Desc)
+				m.createNewUI.ramInput.SetValue(selectedItem.RAM)
+				m.createNewUI.cpuInput.SetValue(selectedItem.CPU)
+				m.createNewUI.cpuSpeedInput.SetValue(selectedItem.CPUSpeed)
 			}
 		case "b":
-			if m.currentFolder != nil {
-				m.recreateList(m.currentFolder.Parent, last_pos)
+			if m.currentCluster != nil {
+				m.recreateList(m.currentCluster.Parent, last_pos)
 			}
 			return m, nil
 		case "p":
 			switch v := m.list.SelectedItem().(type) {
-			case *Task:
-				alertCmd = m.alert.NewAlertCmd(bubbleup.ErrorKey, "Cannot preview a Task")
+			case *Phone:
+				alertCmd = m.alert.NewAlertCmd(bubbleup.ErrorKey, "Cannot preview a Phone")
 				return m, alertCmd
-			case *TaskFolder:
+			case *Cluster:
 				m.statusString = v.returnTree()
 
 			}
@@ -477,37 +434,37 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var itemNames []string
 			for _, item := range m.itemsToDelete {
 				switch v := item.(type) {
-				case *Task:
+				case *Phone:
 					itemNames = append(itemNames, v.Name)
-				case *TaskFolder:
+				case *Cluster:
 					itemNames = append(itemNames, v.Name)
 				}
 			}
 			m.statusString = fmt.Sprintf("Deletions Pendnig: %d items queued \n [%s]'c' to confirm, 'esc' to escape. ", len(m.itemsToDelete), strings.Join(itemNames, "\n, "))
 
 			switch item := selectedItem.(type) {
-			case *Task:
+			case *Phone:
 				if !strings.HasSuffix(item.Name, " (queued for deletion)") {
 					item.Name += " (queued for deletion)"
 				}
-			case *TaskFolder:
+			case *Cluster:
 				if !strings.HasSuffix(item.Name, " (queued for deletion)") {
 					item.Name += " (queued for deletion)"
 				}
 			}
-			m.recreateList(m.currentFolder, m.list.Index())
+			m.recreateList(m.currentCluster, m.list.Index())
 			return m, nil
 		case "n":
-			m.createNewUI.creatingTask = true
-			m.createNewUI.taskNameInput.Focus()
-			m.createNewUI.taskDescInput.Blur()
-			if m.createNewUI.shouldCreateTaskFolder {
-				m.createNewUI.status = "New Folder: " + TASK_MESSAGE
-				alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating Task Folder")
+			m.createNewUI.creatingItem = true
+			m.createNewUI.nameInput.Focus()
+			m.createNewUI.descInput.Blur()
+			if m.createNewUI.shouldCreateCluster {
+				m.createNewUI.status = "New Cluster: " + PHONE_MESSAGE
+				alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating Cluster")
 				return m, alertCmd
 			} else {
-				m.createNewUI.status = "New Task: " + TASK_MESSAGE
-				alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating Task")
+				m.createNewUI.status = "New Phone: " + PHONE_MESSAGE
+				alertCmd := m.alert.NewAlertCmd(bubbleup.InfoKey, "Creating Phone")
 				return m, alertCmd
 			}
 		case "h":
@@ -521,11 +478,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		listWidth := msg.Width - h
 		listHeight := msg.Height - v
 		m.list.SetSize(listWidth, listHeight)
-		m.createNewUI.taskNameInput.Width = msg.Width - 20
-		m.createNewUI.taskDescInput.SetWidth(msg.Width - 20)
+		m.createNewUI.nameInput.Width = msg.Width - 20
+		m.createNewUI.descInput.SetWidth(msg.Width - 20)
 		childMsg := tea.WindowSizeMsg{Width: m.list.Width(), Height: m.list.Height()}
 		for _, val := range m.list.Items() {
-			if v, ok := val.(*TaskFolder); ok {
+			if v, ok := val.(*Cluster); ok {
 				v.update(childMsg)
 			}
 		}
@@ -538,27 +495,30 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) View() string {
-	if m.createNewUI.creatingTask {
+	if m.createNewUI.creatingItem {
 		var s string
 		if m.showHelp {
 			s = lipgloss.JoinVertical(lipgloss.Left,
 				m.createNewUI.status,
-				m.createNewUI.taskNameInput.View(),
-				m.createNewUI.taskDescInput.View(),
-				m.createNewUI.taskDueDateInput.View(),
-				m.createNewUI.taskPriorityInput.View(),
+				m.createNewUI.nameInput.View(),
+				m.createNewUI.descInput.View(),
+				m.createNewUI.ramInput.View(),
+				m.createNewUI.cpuInput.View(),
+				m.createNewUI.cpuSpeedInput.View(),
 				"\n"+m.help.View(createKeys),
 			)
 		} else {
 			s = lipgloss.JoinVertical(lipgloss.Right,
 				m.createNewUI.status,
-				m.createNewUI.taskNameInput.View(),
+				m.createNewUI.nameInput.View(),
 				"\n",
-				m.createNewUI.taskDescInput.View(),
+				m.createNewUI.descInput.View(),
 				"\n",
-				m.createNewUI.taskDueDateInput.View(),
+				m.createNewUI.ramInput.View(),
 				"\n",
-				m.createNewUI.taskPriorityInput.View(),
+				m.createNewUI.cpuInput.View(),
+				"\n",
+				m.createNewUI.cpuSpeedInput.View(),
 			)
 		}
 		return docStyle.Render(m.alert.Render(s))
@@ -584,24 +544,27 @@ func (m *model) View() string {
 
 	return m.alert.Render(s)
 }
-func (m *model) recreateList(folder *TaskFolder, selectedItem int) {
-	if folder == nil {
+func (m *model) recreateList(cluster *Cluster, selectedItem int) {
+	if cluster == nil {
 		return
 	}
-	m.currentFolder = folder
+	m.currentCluster = cluster
+	if m.rootCluster != nil {
+		m.rootCluster.calculateStats()
+	}
 	var items []list.Item
 
-	for _, child := range folder.ChildrenTaskFolders {
-		if !strings.HasPrefix(child.Title(), "📁") {
-			child.Name = "📁 " + child.Title()
+	for _, child := range cluster.ChildrenClusters {
+		if !strings.HasPrefix(child.Title(), "🌐") {
+			child.Name = "🌐 " + child.Title()
 		}
 		items = append(items, child)
 	}
-	for _, child := range folder.ChildrenTasks {
+	for _, child := range cluster.ChildrenPhones {
 		items = append(items, child)
 	}
 	m.list.SetItems(items)
-	m.list.Title = fmt.Sprintf("%s \n %s", m.currentFolder.returnPath(), m.currentFolder.Status.print())
+	m.list.Title = fmt.Sprintf("%s \n %s", m.currentCluster.returnPath(), m.currentCluster.Stats.print())
 	m.list.Select(selectedItem)
 	m.list.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
@@ -615,7 +578,10 @@ func (m *model) recreateList(folder *TaskFolder, selectedItem int) {
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("d", "enter deletion mode")),
 			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "create new item")),
 			key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit item")),
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "enter folder/toggle item")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "enter cluster/toggle item")),
+			keys.startJob,
+			keys.stopJob,
+			keys.restartJob,
 		}
 	}
 }
@@ -624,38 +590,49 @@ func main() {
 
 	flag.StringVar(&config_path, "c", config_path, "config file path")
 	flag.Parse()
+	rand.Seed(time.Now().UnixNano())
 	delegate := itemDelegate{}
-	err, ferr := loadIntoTaskFolder(config_path)
+	err, ferr := loadIntoCluster(config_path)
 	if ferr != nil {
 		panic(ferr)
 	}
 	root := err
 	root.Parent = nil
-	reconstructFolderFromJSON(root)
+	reconstructClusterFromJSON(root)
 	ti := textinput.New()
 	t2 := textarea.New()
-	ti.Placeholder = "New Task Name (Mandatory)"
+	ti.Placeholder = "New Name (Mandatory)"
 	ti.CharLimit = 156
 	ti.Width = 100
-	t2.Placeholder = "Task Description (Mandatory)"
+	t2.Placeholder = "Description (Mandatory)"
 	t2.SetWidth(100)
-	t3 := textinput.New()
-	t3.Placeholder = "DD/MM/YY HH:MM (Optional)"
-	t3.Width = 100
-	t4 := textinput.New()
-	t4.Placeholder = "Priority (LOW/MED/HIGH) (Optional)"
-	t4.Width = 100
+	ramInput := textinput.New()
+	ramInput.Placeholder = "RAM (e.g. 8GB)"
+	ramInput.Width = 100
+	cpuInput := textinput.New()
+	cpuInput.Placeholder = "CPU (e.g. 4 cores)"
+	cpuInput.Width = 100
+	cpuSpeedInput := textinput.New()
+	cpuSpeedInput.Placeholder = "CPU Speed (e.g. 2.4GHz)"
+	cpuSpeedInput.Width = 100
+
 	m := model{
-		list:        list.New(nil, delegate, 80, 24),
-		createNewUI: &CreateNewUI{taskDescInput: t2, taskNameInput: ti, taskDueDateInput: t3, taskPriorityInput: t4},
-		help:        help.New(),
-		alert:       *bubbleup.NewAlertModel(20, true),
+		list: list.New(nil, delegate, 80, 24),
+		createNewUI: &CreateNewUI{
+			descInput:     t2,
+			nameInput:     ti,
+			ramInput:      ramInput,
+			cpuInput:      cpuInput,
+			cpuSpeedInput: cpuSpeedInput,
+		},
+		help:  help.New(),
+		alert: *bubbleup.NewAlertModel(20, true),
 	}
 	m.recreateList(root, m.list.GlobalIndex())
 	m.statusString = "Press P to preview an Item!"
-	m.list.Title = "Task View "
-	m.createNewUI.status = TASK_MESSAGE
-	m.rootFolder = root
+	m.list.Title = "Cluster View "
+	m.createNewUI.status = PHONE_MESSAGE
+	m.rootCluster = root
 
 	p := tea.NewProgram(&m)
 

@@ -22,79 +22,78 @@ func MarshalToFile(filename string, v interface{}) error {
 	return nil
 }
 
-func (f *TaskFolder) DeepCopy() *TaskFolder {
+func (f *Cluster) DeepCopy() *Cluster {
 	if f == nil {
 		return nil
 	}
 
-	newF := &TaskFolder{
-		Name:   f.Name,
-		Desc:   f.Desc,
-		Status: f.Status,
+	newF := &Cluster{
+		Name:  f.Name,
+		Desc:  f.Desc,
+		Stats: f.Stats,
 	}
 
-	if f.ChildrenTasks != nil {
-		newF.ChildrenTasks = make([]*Task, len(f.ChildrenTasks))
-		for i, task := range f.ChildrenTasks {
-			newF.ChildrenTasks[i] = task.deepCopy()
+	if f.ChildrenPhones != nil {
+		newF.ChildrenPhones = make([]*Phone, len(f.ChildrenPhones))
+		for i, task := range f.ChildrenPhones {
+			newF.ChildrenPhones[i] = task.deepCopy()
 		}
 	}
 
-	if f.ChildrenTaskFolders != nil {
-		newF.ChildrenTaskFolders = make([]*TaskFolder, len(f.ChildrenTaskFolders))
-		for i, childFolder := range f.ChildrenTaskFolders {
+	if f.ChildrenClusters != nil {
+		newF.ChildrenClusters = make([]*Cluster, len(f.ChildrenClusters))
+		for i, childFolder := range f.ChildrenClusters {
 			copiedChild := childFolder.DeepCopy()
-			newF.ChildrenTaskFolders[i] = copiedChild
+			newF.ChildrenClusters[i] = copiedChild
 		}
 	}
 
 	return newF
 }
 
-func (t *Task) deepCopy() *Task {
+func (t *Phone) deepCopy() *Phone {
 	if t == nil {
 		return nil
 	}
 
-	newTask := &Task{
-		Name:      t.Name,
-		Desc:      t.Desc,
-		Completed: t.Completed,
-		DueDate:   t.DueDate,
-		Overdue:   t.Overdue,
-		Priority:  t.Priority,
+	newPhone := &Phone{
+		Name:     t.Name,
+		Desc:     t.Desc,
+		RAM:      t.RAM,
+		CPU:      t.CPU,
+		CPUSpeed: t.CPUSpeed,
 	}
-	return newTask
+	return newPhone
 }
 
-func loadIntoTaskFolder(path string) (*TaskFolder, error) {
+func loadIntoCluster(path string) (*Cluster, error) {
 	f, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) == true {
 		os.WriteFile(path, []byte("{}"), 0644)
 	}
-	var Folder TaskFolder
-	_ = json.Unmarshal(f, &Folder)
-	return &Folder, nil
+	var cluster Cluster
+	_ = json.Unmarshal(f, &cluster)
+	return &cluster, nil
 }
-func reconstructFolderFromJSON(Folder *TaskFolder) {
-	for _, item := range Folder.ChildrenTaskFolders {
-		item.Parent = Folder
-		reconstructFolderFromJSON(item)
+func reconstructClusterFromJSON(cluster *Cluster) {
+	cluster.JobState = "stopped"
+	for _, item := range cluster.ChildrenClusters {
+		item.Parent = cluster
+		item.JobState = "stopped"
+		reconstructClusterFromJSON(item)
 	}
-	for range Folder.ChildrenTasks {
-		reconstructTasksFromJSON(Folder)
+	for range cluster.ChildrenPhones {
+		reconstructPhonesFromJSON(cluster)
 	}
-	if Folder.Parent != nil {
-		Folder.Progress = progress.New()
-		if Folder.Status.Total > 0 {
-			Folder.Progress.SetPercent(float64(Folder.Status.Completed/Folder.Status.Total) * 100)
-		}
+	if cluster.Parent != nil {
+		cluster.Progress = progress.New()
+		cluster.Progress.SetPercent(0)
 
 	}
 
 }
-func reconstructTasksFromJSON(Folder *TaskFolder) {
-	for _, item := range Folder.ChildrenTasks {
-		item.ParentFolder = Folder
+func reconstructPhonesFromJSON(cluster *Cluster) {
+	for _, item := range cluster.ChildrenPhones {
+		item.ParentCluster = cluster
 	}
 }
