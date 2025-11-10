@@ -8,11 +8,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ae69dcf8-a677-4195-889b-9019321d52b6" name="Changes" comment="i forgor">
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/.idea/workspace.xml" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/README.md" beforeDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/config.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/config.go" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/main.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/main.go" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/models.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/models.go" afterDir="false" />
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/brushes.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/brushes.go" afterDir="false" />
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/config.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/config.go" afterDir="false" />
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/go.mod" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/go.mod" afterDir="false" />
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/go.sum" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/go.sum" afterDir="false" />
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/main.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/main.go" afterDir="false" />
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/models.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/models.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -39,7 +40,7 @@
 }</component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/TTF-fog/ToDoIt.git&quot;,
+    &quot;url&quot;: &quot;https://github.com/TTF-fog/PowerCluster.git&quot;,
     &quot;accountId&quot;: &quot;7b87e01c-7d5a-4f62-8477-db5615ca22d6&quot;
   }
 }</component>
@@ -54,37 +55,40 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "DefaultGoTemplateProperty": "Go File",
-    "Go Build.Build For Debug.executor": "Debug",
-    "Go Build.go build ToDoIt.executor": "Debug",
-    "Go Build.go build main.go.executor": "Debug",
-    "Go Remote.Debug Bubbletea.executor": "Debug",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.GoLinterPluginOnboarding": "true",
-    "RunOnceActivity.GoLinterPluginStorageMigration": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.go.formatter.settings.were.checked": "true",
-    "RunOnceActivity.go.migrated.go.modules.settings": "true",
-    "RunOnceActivity.go.modules.go.list.on.any.changes.was.set": "true",
-    "Shell Script.Setup Delve.executor": "Debug",
-    "git-widget-placeholder": "master",
-    "go.import.settings.migrated": "true",
-    "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "/home/ishaan/home/ishaan/GolandProjects/PowerCluster",
-    "node.js.detected.package.eslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "onboarding.tips.debug.path": "/home/ishaan/home/ishaan/GolandProjects/ToDoIt/main.go",
-    "settings.editor.selected.configurable": "editor.preferences.gutterIcons"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;DefaultGoTemplateProperty&quot;: &quot;Go File&quot;,
+    &quot;Go Build.Build For Debug.executor&quot;: &quot;Debug&quot;,
+    &quot;Go Build.go build ToDoIt.executor&quot;: &quot;Debug&quot;,
+    &quot;Go Build.go build main.go.executor&quot;: &quot;Debug&quot;,
+    &quot;Go Remote.Debug Bubbletea.executor&quot;: &quot;Debug&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.GoLinterPluginOnboarding&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.GoLinterPluginStorageMigration&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.formatter.settings.were.checked&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.migrated.go.modules.settings&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.modules.go.list.on.any.changes.was.set&quot;: &quot;true&quot;,
+    &quot;Shell Script.Setup Delve.executor&quot;: &quot;Debug&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;go.import.settings.migrated&quot;: &quot;true&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/ishaan/home/ishaan/GolandProjects/PowerCluster&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;onboarding.tips.debug.path&quot;: &quot;/home/ishaan/home/ishaan/GolandProjects/ToDoIt/main.go&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;editor.preferences.gutterIcons&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend" />
     </key>
   </component>
   <component name="RunManager" selected="Compound.Debug Bubbletea">
