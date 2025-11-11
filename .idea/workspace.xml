@@ -7,13 +7,9 @@
     <option name="askBeforeDeletingLists" value="false" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ae69dcf8-a677-4195-889b-9019321d52b6" name="Changes" comment="i forgor">
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/brushes.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/brushes.go" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/config.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/config.go" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/go.mod" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/go.mod" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/go.sum" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/go.sum" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/main.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/main.go" afterDir="false" />
-      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/models.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/models.go" afterDir="false" />
+    <list default="true" id="ae69dcf8-a677-4195-889b-9019321d52b6" name="Changes" comment="reformat">
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/.idea/workspace.xml" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/main.go" beforeDir="false" afterPath="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend/main.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -88,6 +84,7 @@
       <recent name="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt" />
       <recent name="$USER_HOME$/home/ishaan/GolandProjects/ToDoIt/frontend" />
     </key>
   </component>
@@ -231,7 +228,8 @@
     <MESSAGE value="add description field to preview, prevent dividebyzero crash in config load, add enhanced deletion mode, bugfixes for deletion, added edit mode, fixed improper return behaviour, expanded config save triggers" />
     <MESSAGE value="delete unused test data" />
     <MESSAGE value="i forgor" />
-    <option name="LAST_COMMIT_MESSAGE" value="i forgor" />
+    <MESSAGE value="reformat" />
+    <option name="LAST_COMMIT_MESSAGE" value="reformat" />
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>

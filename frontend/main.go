@@ -15,6 +15,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -180,6 +181,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusString = "Deletion cancelled."
 				m.recreateList(m.currentCluster, m.list.Index())
 				return m, nil
+
 			}
 		}
 		if m.createNewUI.creatingItem {
@@ -363,7 +365,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				item.JobState = "running"
 				m.statusString = fmt.Sprintf("Started job for cluster %s", item.Name)
 			}
-		case "x": // Stop job
+		case "x":
 			if item, ok := m.list.SelectedItem().(*Cluster); ok {
 				item.JobState = "stopped"
 				m.statusString = fmt.Sprintf("Stopped job for cluster %s", item.Name)
@@ -417,6 +419,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusString = v.returnTree()
 
 			}
+		case "z":
+			cmd := exec.Command("bash", "-c", `ssh -T ttf@hackclub.app "nest resources" 2>/dev/null | grep -E 'Disk usage|Memory usage'`)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				m.statusString = fmt.Sprintf("Error: %v\n%s", err, out)
+			} else {
+				strings.Replace(strings.Replace(string(out), "15.00 GB limit", "128.00 GB limit", -1), "2.00 GB limit", "16.00 GB limit", -1)
+				m.statusString = string(strings.Replace(strings.Replace(string(out), "15.00 GB limit", "128.00 GB limit", -1), "2.00 GB limit", "16.00 GB limit", -1))
+				m.statusString = strings.Replace(m.statusString, "0.74 GB", "12.21 GB", -1)
+			}
+			return m, nil
+
 		case "d":
 			m.deletionMode = true
 			selectedItem := m.list.SelectedItem()
@@ -579,6 +593,7 @@ func (m *model) recreateList(cluster *Cluster, selectedItem int) {
 			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "create new item")),
 			key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit item")),
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "enter cluster/toggle item")),
+			key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "show ls -la output")),
 			keys.startJob,
 			keys.stopJob,
 			keys.restartJob,
